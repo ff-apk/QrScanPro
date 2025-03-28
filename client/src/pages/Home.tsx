@@ -124,20 +124,50 @@ export default function Home() {
 
     // Stop current scanner
     if (scanner && scannerInitialized) {
+      // First determine which camera we're switching to
+      const newFacingMode = facingMode === "environment" ? "user" : "environment";
+      const cameraLabel = newFacingMode === "environment" ? "back" : "front";
+      
+      toast.loading(`Switching to ${cameraLabel} camera...`);
+      
       scanner.stop().then(() => {
         setScannerInitialized(false);
-        setFacingMode(facingMode === "environment" ? "user" : "environment");
         
-        toast.info(`Switched to ${facingMode === "environment" ? "front" : "back"} camera`);
+        // Set the new facing mode
+        setFacingMode(newFacingMode);
+        
+        // Close all camera tracks
+        if (currentStream) {
+          currentStream.getTracks().forEach(track => track.stop());
+          setCurrentStream(null);
+        }
         
         // Wait a moment before restarting with new camera
         setTimeout(() => {
-          setIsCameraActive(true);
+          setIsCameraActive(false); // First turn off
+          setTimeout(() => {
+            toast.dismiss();
+            toast.success(`Switched to ${cameraLabel} camera`);
+            setIsCameraActive(true); // Then turn back on with new camera
+          }, 300);
         }, 500);
       }).catch(error => {
+        toast.dismiss();
         console.error("Error stopping camera:", error);
-        toast.error("Failed to switch camera");
+        toast.error("Failed to switch camera", {
+          description: "Please try again"
+        });
       });
+    } else {
+      // If scanner isn't active yet, just switch the mode
+      const newFacingMode = facingMode === "environment" ? "user" : "environment";
+      setFacingMode(newFacingMode);
+      toast.info(`Set to ${newFacingMode === "environment" ? "back" : "front"} camera`);
+      
+      // If camera isn't active, activate it
+      if (!isCameraActive) {
+        setIsCameraActive(true);
+      }
     }
   };
 
