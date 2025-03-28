@@ -11,9 +11,10 @@ export default function Home() {
   const [currentStream, setCurrentStream] = useState<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<string>("environment");
   const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
-  const [showPermissionModal, setShowPermissionModal] = useState(true);
+  const [showPermissionModal, setShowPermissionModal] = useState(false); // Start false, we'll check first
   const [scanner, setScanner] = useState<Html5Qrcode | null>(null);
   const [scannerInitialized, setScannerInitialized] = useState(false);
+  const [checkingPermissions, setCheckingPermissions] = useState(true); // For initial permission check
 
   // Initialize QR scanner when camera is active
   useEffect(() => {
@@ -141,10 +142,65 @@ export default function Home() {
   };
 
   const handleTakePhoto = () => {
-    toast.info("Opening file selector", {
-      description: "Select a photo containing a QR code"
+    // Check if we have camera permission
+    if (!cameraPermissionGranted) {
+      toast.error("Camera permission not granted", {
+        description: "Please allow camera access first"
+      });
+      return;
+    }
+
+    // Create a new file input that specifically accepts camera captures
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    // Use setAttribute for non-standard attributes
+    input.setAttribute('capture', 'environment'); // This prompts the native camera app
+    
+    // Set up the change handler
+    input.onchange = (event) => {
+      const target = event.target as HTMLInputElement;
+      if (target.files && target.files[0]) {
+        const file = target.files[0];
+        
+        toast.loading("Processing image from camera...");
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          if (e.target?.result) {
+            const img = new Image();
+            img.onload = function() {
+              processQRCodeImage(img)
+                .then(result => {
+                  toast.dismiss();
+                  if (result) {
+                    handleSuccessfulScan(result);
+                  } else {
+                    toast.error("No QR code detected", {
+                      description: "Try taking a clearer photo"
+                    });
+                  }
+                })
+                .catch(error => {
+                  toast.dismiss();
+                  toast.error("Error processing QR code", {
+                    description: error.message
+                  });
+                });
+            };
+            img.src = e.target.result as string;
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    
+    // Trigger the file input
+    input.click();
+    
+    toast.info("Opening camera", {
+      description: "Take a photo of the QR code"
     });
-    document.getElementById("file-input")?.click();
   };
 
   const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
@@ -215,6 +271,53 @@ export default function Home() {
       description: "You can upload QR code images to scan"
     });
   };
+
+  // Check camera permission on component mount
+  useEffect(() => {
+    // Check if camera permissions are already granted
+    const checkCameraPermission = async () => {
+      try {
+        // Check if permission state is available
+        if (navigator.permissions && navigator.permissions.query) {
+          // Try to query for camera permission state
+          const permissionStatus = await navigator.permissions.query({ name: 'camera' as PermissionName });
+          
+          if (permissionStatus.state === 'granted') {
+            // Camera permission already granted
+            setCameraPermissionGranted(true);
+            setIsCameraActive(true);
+            setShowPermissionModal(false);
+          } else if (permissionStatus.state === 'prompt') {
+            // User hasn't made a decision yet, show the modal
+            setShowPermissionModal(true);
+          } else {
+            // Permission denied previously
+            setShowPermissionModal(true);
+          }
+        } else {
+          // Permissions API not supported, try getUserMedia directly
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // If we get here, permission is granted
+            stream.getTracks().forEach(track => track.stop()); // Stop the stream right away
+            setCameraPermissionGranted(true);
+            setIsCameraActive(true);
+            setShowPermissionModal(false);
+          } catch (error) {
+            // Permission denied or error
+            setShowPermissionModal(true);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking camera permission:", error);
+        setShowPermissionModal(true);
+      } finally {
+        setCheckingPermissions(false);
+      }
+    };
+
+    checkCameraPermission();
+  }, []);
 
   // Clean up on unmount
   useEffect(() => {
