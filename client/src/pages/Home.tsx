@@ -19,34 +19,9 @@ export default function Home() {
   // Initialize QR scanner when camera is active
   useEffect(() => {
     if (isCameraActive && !scannerInitialized) {
-      let qrScanner: Html5Qrcode;
-      
       try {
-        // First, cleanup any existing scanner instance
-        if (scanner) {
-          try {
-            scanner.stop().catch(err => console.error("Error stopping existing scanner:", err));
-            setScanner(null);
-          } catch (e) {
-            console.error("Error cleaning up scanner:", e);
-          }
-        }
-        
-        // Create new scanner instance
-        const qrScannerElement = document.getElementById("camera-view");
-        if (!qrScannerElement) {
-          console.error("Camera element not found");
-          return;
-        }
-        
-        // Check if there's already a scanner initialized
-        try {
-          qrScanner = new Html5Qrcode("camera-view");
-          setScanner(qrScanner);
-        } catch (e) {
-          console.error("Error creating scanner:", e);
-          return;
-        }
+        const qrScanner = new Html5Qrcode("camera-view");
+        setScanner(qrScanner);
         
         const config = {
           fps: 10,
@@ -55,7 +30,6 @@ export default function Home() {
           disableFlip: false
         };
         
-        // Start scanning
         qrScanner.start(
           { facingMode },
           config,
@@ -78,24 +52,16 @@ export default function Home() {
         })
         .catch((err) => {
           console.error("Error starting scanner:", err);
-          setScannerInitialized(false); // Make sure we reset this
           toast.error("Scanner error", {
             description: "Failed to initialize QR scanner. Please try again."
           });
         });
       } catch (error) {
-        console.error("Error in scanner setup:", error);
-        setScannerInitialized(false);
-        toast.error("Scanner error", {
-          description: "Failed to set up QR scanner. Please try again."
-        });
+        console.error("Error initializing scanner:", error);
       }
-    }
-    
-    // Cleanup function
-    return () => {
-      if (isCameraActive && scanner && scannerInitialized) {
-        try {
+      
+      return () => {
+        if (scanner) {
           scanner.stop()
             .then(() => {
               setScannerInitialized(false);
@@ -104,11 +70,9 @@ export default function Home() {
             .catch((err) => {
               console.error("Error stopping scanner:", err);
             });
-        } catch (e) {
-          console.error("Error in scanner cleanup:", e);
         }
-      }
-    };
+      };
+    }
   }, [isCameraActive, scannerInitialized, facingMode]);
 
   // Helper function to get the current MediaStream from scanner
@@ -158,47 +122,53 @@ export default function Home() {
       return;
     }
 
-    // Determine which camera we're switching to
-    const newFacingMode = facingMode === "environment" ? "user" : "environment";
-    const cameraLabel = newFacingMode === "environment" ? "back" : "front";
-    
-    toast.loading(`Switching to ${cameraLabel} camera...`);
-    
-    // First stop any existing camera
-    if (isCameraActive) {
-      // Completely deactivate the camera first
-      setIsCameraActive(false);
+    // Stop current scanner
+    if (scanner && scannerInitialized) {
+      // First determine which camera we're switching to
+      const newFacingMode = facingMode === "environment" ? "user" : "environment";
+      const cameraLabel = newFacingMode === "environment" ? "back" : "front";
       
-      // If scanner exists, stop it
-      if (scanner && scannerInitialized) {
-        try {
-          scanner.stop().catch(console.error);
-          setScannerInitialized(false);
-        } catch (err) {
-          console.error("Error stopping scanner:", err);
-        }
-      }
+      toast.loading(`Switching to ${cameraLabel} camera...`);
       
-      // Close all camera tracks
-      if (currentStream) {
-        try {
+      scanner.stop().then(() => {
+        setScannerInitialized(false);
+        
+        // Set the new facing mode
+        setFacingMode(newFacingMode);
+        
+        // Close all camera tracks
+        if (currentStream) {
           currentStream.getTracks().forEach(track => track.stop());
           setCurrentStream(null);
-        } catch (err) {
-          console.error("Error stopping streams:", err);
         }
+        
+        // Wait a moment before restarting with new camera
+        setTimeout(() => {
+          setIsCameraActive(false); // First turn off
+          setTimeout(() => {
+            toast.dismiss();
+            toast.success(`Switched to ${cameraLabel} camera`);
+            setIsCameraActive(true); // Then turn back on with new camera
+          }, 300);
+        }, 500);
+      }).catch(error => {
+        toast.dismiss();
+        console.error("Error stopping camera:", error);
+        toast.error("Failed to switch camera", {
+          description: "Please try again"
+        });
+      });
+    } else {
+      // If scanner isn't active yet, just switch the mode
+      const newFacingMode = facingMode === "environment" ? "user" : "environment";
+      setFacingMode(newFacingMode);
+      toast.info(`Set to ${newFacingMode === "environment" ? "back" : "front"} camera`);
+      
+      // If camera isn't active, activate it
+      if (!isCameraActive) {
+        setIsCameraActive(true);
       }
     }
-    
-    // Set the new facing mode
-    setFacingMode(newFacingMode);
-    
-    // Wait a moment before reactivating the camera
-    setTimeout(() => {
-      toast.dismiss();
-      toast.success(`Switched to ${cameraLabel} camera`);
-      setIsCameraActive(true);
-    }, 500);
   };
 
   const handleTakePhoto = () => {
