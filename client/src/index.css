@@ -2,6 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  /* Glassmorphism effect for UI elements */
+  .glassmorphism {
+    @apply bg-black/40 backdrop-blur-md backdrop-saturate-150 border-t border-white/10;
+  }
+  
+  /* Scanner overlay with animation */
+  .scanner-overlay {
+    @apply absolute inset-0 pointer-events-none flex flex-col items-center justify-center;
+  }
+  
+  .scanner-line {
+    @apply w-72 h-72 border-2 border-primary/70 relative rounded-lg overflow-hidden;
+  }
+  
+  .scanner-line::after {
+    content: '';
+    @apply absolute left-0 right-0 h-0.5 bg-primary;
+    animation: scan 2s infinite;
+    box-shadow: 0 0 10px 3px rgba(var(--primary), 0.7);
+  }
+  
+  @keyframes scan {
+    0% {
+      top: 0%;
+    }
+    50% {
+      top: 100%;
+    }
+    100% {
+      top: 0%;
+    }
+  }
+  
+  /* Override video element to fill screen */
+  video {
+    @apply absolute inset-0 min-h-screen min-w-full object-cover;
+  }
+  
+  /* Torch and zoom controls */
+  .camera-controls {
+    @apply absolute bottom-24 left-0 right-0 flex justify-center items-center gap-4 z-20;
+  }
+}
+
+/* Hide html5-qrcode library elements */
+#html5-qrcode-button-camera-permission, 
+#html5-qrcode-button-camera-start, 
+#html5-qrcode-button-camera-stop,
+#html5-qrcode-anchor-scan-type-change {
+  display: none !important;
+}
+
+/* Hidden temporary scanner container */
+#temp-qr-scanner {
+  position: absolute;
+  visibility: hidden;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 @layer base {
   * {
     @apply border-border;
